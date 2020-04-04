@@ -1,14 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using System.IO.Ports;
 using System.Threading;
 using System.Text.RegularExpressions;
-using GsmComm.PduConverter;
-using SMSPDULib;
-
 
 namespace GSMSerial
 {
@@ -17,8 +12,6 @@ namespace GSMSerial
         private SerialPort port = null;
         private AutoResetEvent receiveNow;
         private string portName = "";
-        private bool idleReceive = false;
-        private List<int> smsIds = new List<int>(); 
 
         public GsmCommunication(string portName)
         {
@@ -37,33 +30,6 @@ namespace GSMSerial
             port.DataReceived += new SerialDataReceivedEventHandler(port_DataReceived);
             port.DtrEnable = true;
             port.RtsEnable = true;
-        }
-
-
-        /*
-         * Activates receiving and parsing of data while no commands are being sent to GSM modem.
-         * 
-         */
-        public void idleReceiveStart()
-        {
-            idleReceive = true;
-        }
-
-        public void idleReceiveStop()
-        {
-            idleReceive = false;
-        }
-
-        public List<int> getSmsIds()
-        {
-            if(smsIds.Count > 0)
-                return smsIds;
-            return null;
-        }
-
-        public void clearSmsIds()
-        {
-            smsIds.Clear();
         }
 
         public bool CheckPort()

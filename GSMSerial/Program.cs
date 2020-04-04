@@ -9,14 +9,10 @@ using xNet;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-
 namespace GSMSerial
 {
     class Program
     {
-        /*[DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-        public static extern int MessageBox(int hWnd, String text, String caption, uint type);*/
-
         const int MAX_MODULES_COUNT = 16;
         const int MAIN_DELAY        = 60000 * 5; //Delay 5 minutes between checking new modules
 
