@@ -6,6 +6,9 @@ using System.Threading.Tasks;
 using System.IO.Ports;
 using System.Threading;
 using System.Text.RegularExpressions;
+using GsmComm.PduConverter;
+using SMSPDULib;
+
 
 namespace GSMSerial
 {
@@ -15,11 +18,12 @@ namespace GSMSerial
         private AutoResetEvent receiveNow;
         private string portName = "";
         private bool idleReceive = false;
+        private List<int> smsIds = new List<int>(); 
 
         public GsmCommunication(string portName)
         {
             this.portName = portName;
-            receiveNow  = new AutoResetEvent(false);
+            receiveNow    = new AutoResetEvent(false);
         }
 
         #region Communication
@@ -48,6 +52,18 @@ namespace GSMSerial
         public void idleReceiveStop()
         {
             idleReceive = false;
+        }
+
+        public List<int> getSmsIds()
+        {
+            if(smsIds.Count > 0)
+                return smsIds;
+            return null;
+        }
+
+        public void clearSmsIds()
+        {
+            smsIds.Clear();
         }
 
         public bool CheckPort()
@@ -79,28 +95,58 @@ namespace GSMSerial
             if (e.EventType == SerialData.Chars)
             {
                 receiveNow.Set();
+            }
+        }
 
-                if (idleReceive)
+        public class SMS
+        {
+            public int ID;
+            public string Sender;
+            public string Message;
+            public string Date;
+        }
+
+        public List<SMS> ReadSMS()
+        {
+            List<SMS> messages = new List<SMS>();
+
+            if (port != null)
+            {
+                try
                 {
-                    try
-                    {
-                        string resp = ReadResponse(500);
+                    //Enable SMS Text Mode
+                    ExecCommand("AT+CMGF=1", 300, "Failed to set Text message mode on port : " + portName);
 
-                        if (Regex.IsMatch(resp, "\\+CMTI: \"(.+)\",(\\d+)"))
-                        {
-                            string msg = Regex.Match(resp, "\\+CMTI: \"(.+)\",(\\d+)").Groups[1].Value;
-                            string Id = Regex.Match(resp, "\\+CMTI: \"(.+)\",(\\d+)").Groups[2].Value;
+                    //Set encoding to iso-8859-1
+                    ExecCommand("AT+CSCS=\"8859-1\"", 500, "Failed to set message encoding on port: " + portName);
 
-                            //TODO: some logic to read last message
-                            Console.WriteLine("[{0}] SMS message received. Message ID = {1}", portName, Id);
-                        }
-                    }
-                    catch (ApplicationException ex)
+                    //Read Messages
+                    string response = ExecCommand("AT+CMGL=\"ALL\"", 5000, "Failed to read SMS messages on port : " + portName);
+
+                    Regex r = new Regex(@"\+CMGL: (\d+),""(.+)"",""(.+)"",(.*),""(.+)""\r\n(.+)\r\n");
+                    Match m = r.Match(response);
+                    while (m.Success)
                     {
-                        Console.WriteLine("[{1}] reading failed, could be due to checks : {0}", ex.Message, portName);
+                        SMS msg = new SMS();
+                        msg.ID = int.Parse(m.Groups[1].Value);
+                        msg.Sender = m.Groups[3].Value;
+                        msg.Date   = m.Groups[5].Value;
+                        msg.Message = m.Groups[6].Value;
+                        messages.Add(msg);
+
+                        m = m.NextMatch();
                     }
+
+                    return messages;
+
                 }
-             }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("[{0}][Error] : {1}", portName, ex.Message);
+                }
+            }
+
+            return messages;
         }
 
         private string ReadResponse(int timeout)
@@ -121,7 +167,7 @@ namespace GSMSerial
                         throw new ApplicationException("No data received from phone.");
                 }
             }
-            while (!buffer.EndsWith("\r\nOK\r\n") && !buffer.EndsWith("\r\nERROR\r\n") && !Regex.IsMatch(buffer, "\\+CMTI: \"(.+)\",(\\d+)"));
+            while (!buffer.EndsWith("\r\nOK\r\n") && !buffer.EndsWith("\r\nERROR\r\n"));
             return buffer;
         }
 
@@ -132,15 +178,30 @@ namespace GSMSerial
             {
                 string resp = ExecCommand("AT+CNUM", 500, "Failed to get SIM card number on port " + portName);
 
-                if (Regex.IsMatch(resp, "\\+CNUM: \"(.+)\",\"(.+)\",(\\d+),(\\d+),(\\d+)"))
+                if (Regex.IsMatch(resp, "\\+CNUM: (.+),\"(.+)\",(\\d+),(\\d+),(\\d+)"))
                 {
-                    string number = Regex.Match(resp, "\\+CNUM: \"(.+)\",\"(.+)\",(\\d+),(\\d+),(\\d+)").Groups[2].Value;
+                    string number = Regex.Match(resp, "\\+CNUM: (.+),\"(.+)\",(\\d+),(\\d+),(\\d+)").Groups[2].Value;
 
                     return number;
                 }
             }
 
             return null;
+        }
+
+        public void ClearSMS()
+        {
+            if(port != null)
+            {
+                try
+                {
+                    ExecCommand("AT+CMGD=1,4", 500, "Unable to delete sms messages on port: " + portName);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("[{0}][Error] failed to delete sms messages on storage: {1}", portName, ex.Message);
+                }
+            }
         }
 
         public string GetImei()
@@ -178,5 +239,7 @@ namespace GSMSerial
             }
         }
         #endregion
+
+        
     }
 }
